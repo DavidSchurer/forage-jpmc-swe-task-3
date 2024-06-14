@@ -1,0 +1,148 @@
+From 9e8329156c49802385b3c3a74dc57f9ce6008156 Mon Sep 17 00:00:00 2001
+From: David Schurer <david.schurer@yahoo.com>
+Date: Thu, 13 Jun 2024 19:57:02 -0700
+Subject: [PATCH] finished task
+
+---
+ src/App.tsx            |  2 +-
+ src/DataManipulator.ts | 38 +++++++++++++++++++++++++++-----------
+ src/Graph.tsx          | 29 ++++++++++++++++-------------
+ 3 files changed, 44 insertions(+), 25 deletions(-)
+
+diff --git a/src/App.tsx b/src/App.tsx
+index 274d20b..4d2a966 100755
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -56,4 +56,4 @@ class App extends Component<{}, IState> {
+   }
+ }
+ 
+-export default App;
++export default App;
+\ No newline at end of file
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index 7f62295..6b83572 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -1,20 +1,36 @@
++// File: src/DataManipulator.ts
++
+ import { ServerRespond } from './DataStreamer';
+ 
+ export interface Row {
+-  stock: string,
+-  top_ask_price: number,
++  ratio: number,
+   timestamp: Date,
++  upper_bound: number,
++  lower_bound: number,
++  trigger_alert: number | undefined,
+ }
+ 
+-
+ export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]) {
+-    return serverResponds.map((el: any) => {
+-      return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
+-      };
+-    })
++  static generateRow(serverResponds: ServerRespond[]): Row[] {
++    const stockA = serverResponds.find(el => el.stock === 'ABC');
++    const stockB = serverResponds.find(el => el.stock === 'DEF');
++
++    const priceA = stockA && stockA.top_ask ? stockA.top_ask.price : 0;
++    const priceB = stockB && stockB.top_ask ? stockB.top_ask.price : 0;
++
++    const ratio = priceA / priceB;
++
++    const upper_bound = 1 + 0.05;
++    const lower_bound = 1 - 0.05;
++
++    const trigger_alert = (ratio > upper_bound || ratio < lower_bound) ? ratio : undefined;
++
++    return [{
++      ratio,
++      timestamp: new Date(serverResponds[0].timestamp),
++      upper_bound,
++      lower_bound,
++      trigger_alert,
++    }];
+   }
+ }
+diff --git a/src/Graph.tsx b/src/Graph.tsx
+index 277797d..fb29458 100644
+--- a/src/Graph.tsx
++++ b/src/Graph.tsx
+@@ -1,5 +1,7 @@
++// File: src/Graph.tsx
++
+ import React, { Component } from 'react';
+-import { Table } from '@finos/perspective';
++import { Table, TableData } from '@finos/perspective';
+ import { ServerRespond } from './DataStreamer';
+ import { DataManipulator } from './DataManipulator';
+ import './Graph.css';
+@@ -11,6 +13,7 @@ interface IProps {
+ interface PerspectiveViewerElement extends HTMLElement {
+   load: (table: Table) => void,
+ }
++
+ class Graph extends Component<IProps, {}> {
+   table: Table | undefined;
+ 
+@@ -23,10 +26,11 @@ class Graph extends Component<IProps, {}> {
+     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+ 
+     const schema = {
+-      stock: 'string',
+-      top_ask_price: 'float',
+-      top_bid_price: 'float',
++      ratio: 'float',
+       timestamp: 'date',
++      upper_bound: 'float',
++      lower_bound: 'float',
++      trigger_alert: 'float',
+     };
+ 
+     if (window.perspective && window.perspective.worker()) {
+@@ -36,25 +40,24 @@ class Graph extends Component<IProps, {}> {
+       // Load the `table` in the `<perspective-viewer>` DOM reference.
+       elem.load(this.table);
+       elem.setAttribute('view', 'y_line');
+-      elem.setAttribute('column-pivots', '["stock"]');
+       elem.setAttribute('row-pivots', '["timestamp"]');
+-      elem.setAttribute('columns', '["top_ask_price"]');
++      elem.setAttribute('columns', '["ratio", "upper_bound", "lower_bound", "trigger_alert"]');
+       elem.setAttribute('aggregates', JSON.stringify({
+-        stock: 'distinctcount',
+-        top_ask_price: 'avg',
+-        top_bid_price: 'avg',
++        ratio: 'avg',
+         timestamp: 'distinct count',
++        upper_bound: 'avg',
++        lower_bound: 'avg',
++        trigger_alert: 'avg',
+       }));
+     }
+   }
+ 
+   componentDidUpdate() {
+     if (this.table) {
+-      this.table.update(
+-        DataManipulator.generateRow(this.props.data),
+-      );
++      const rowData = DataManipulator.generateRow(this.props.data);
++      this.table.update(rowData as unknown as TableData);
+     }
+   }
+ }
+ 
+-export default Graph;
++export default Graph;
+\ No newline at end of file
+-- 
+2.44.0.windows.1
+
